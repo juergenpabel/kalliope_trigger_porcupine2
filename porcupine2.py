@@ -2,9 +2,12 @@
 
 import logging
 import time
+from os.path import basename, expanduser
 from threading import Thread
 from kalliope import Utils
-from pvporcupine import Porcupine
+from pvporcupine import Porcupine, create as new_Porcupine, MODEL_PATH
+import pyaudio
+import struct
 
 
 logging.basicConfig()
@@ -13,7 +16,7 @@ logger = logging.getLogger("kalliope")
 
 class Porcupine2(Thread):
 	def __init__(self, **kwargs):
-		super(MQTT, self).__init__()
+		super(Porcupine2, self).__init__()
 		logger.debug("[trigger:porcupine2] __init__()")
 		self.input_device_index = kwargs.get('input_device_index', None)
 		self.callback = kwargs.get('callback', None)
@@ -21,43 +24,50 @@ class Porcupine2(Thread):
 			raise MissingParameterException("Trigger callback method is missing (keyword argument 'callback')")
 
 		self.config = dict()
-		for key in ['access_key', 'library_path', 'model_path', 'keyword_paths', 'keywords', 'sensitivities']:
-			self.config[key] = kwargs.get(key, "")
-		if len(self.config['access_key']) == 0:
-			raise MissingParameterException("mandatory 'access_key' is missing in configuration")
+		for key in ['access_key_file', 'access_key', 'library_path', 'model_path', 'keyword_paths', 'sensitivities']:
+			self.config[key] = kwargs.get(key, None)
+		if self.config['access_key_file'] is None and self.config['access_key'] is None:
+			raise MissingParameterException("mandatory 'access_key' (or 'access_key_file') is missing in configuration")
 
-		self.config['keyword_paths'] = [keyword_path.trim()       for keyword_path in self.config['keyword_paths'].split(',')]
-		self.config['keywords']      = [keyword.trim()            for keyword      in self.config['keywords'].split(',')]
-		self.config['sensitivities'] = [float(sensitivity.trim()) for sensitivity  in self.config['sensitivities'].split(',')]
-		self.config['keyword_paths'] = [Utils.get_real_file_path(keyword_path) for keyword_path in self.config['keyword_paths']]
-
-		self.porcupine = Porcupine(self.config['access_key'], self.config['library_path'], self.config['model_path'],
-		                           self.config['keyword_paths'], self.config['keywords'], self.config['sensitivities'])
+		if self.config['access_key_file'] is not None:
+			with open(expanduser(self.config['access_key_file']), 'r') as file:
+				self.config['access_key'] = file.readline().strip()
+			del self.config['access_key_file']
+		if self.config['keyword_paths'] is not None:
+			self.config['keyword_paths'] = [keyword_path.strip() for keyword_path in self.config['keyword_paths'].split(',')]
+			self.config['keyword_paths'] = [Utils.get_real_file_path(keyword_path) for keyword_path in self.config['keyword_paths']]
+		if type(self.config['sensitivities']) is float:
+			self.config['sensitivities'] = [self.config['sensitivities']]
 
 
 	def run(self):
 		logger.debug("[trigger:porcupine2] run()")
+		self.porcupine = new_Porcupine(access_key=self.config['access_key'], library_path=self.config['library_path'],
+		                           model_path=self.config['model_path'], keyword_paths=self.config['keyword_paths'],
+		                           sensitivities=self.config['sensitivities'])
 		self.pyaudio = pyaudio.PyAudio()
-		self.audio_stream = self.pyaudio.open(rate=self.porcupine.sample_rate, channels=1, format=pyaudio.paInt16, input=True,
-		                                 frames_per_buffer=self.porcupine.frame_length, input_device_index=self.input_device_index)
-		self.paused = False
+		self.audio_stream = None
 		while True:
-			if self.pause is False:
+			if self.audio_stream is not None:
 				pcm = self.audio_stream.read(self.porcupine.frame_length)
 				pcm = struct.unpack_from("h" * self.porcupine.frame_length, pcm)
-				keyword = self.porcupine.process()
+				keyword = self.porcupine.process(pcm)
 				if keyword >= 0:
-					logger.info("[trigger:porcupine2] keyword '{}' detected".format(in self.config['keywords'][keyword]))
+					logger.info("[trigger:porcupine2] keyword from '{}' detected".format(basename(self.config['keyword_paths'][keyword])))
+					self.pause()
 					self.callback()
-					self.paused = True
 			else:
 				time.sleep(0.1)
 
 	def pause(self):
-		logger.debug("[trigger:porcupine2] pause()")
-		self.paused = True
+		if self.audio_stream is not None:
+			logger.debug("[trigger:porcupine2] pause()")
+			self.audio_stream.close()
+			self.audio_stream = None
 
 	def unpause(self):
-		logger.debug("[trigger:porcupine2] unpause()")
-		self.paused = False
+		if self.audio_stream is None:
+			logger.debug("[trigger:porcupine2] unpause()")
+			self.audio_stream = self.pyaudio.open(rate=self.porcupine.sample_rate, channels=1, format=pyaudio.paInt16, input=True,
+			                                      frames_per_buffer=self.porcupine.frame_length, input_device_index=self.input_device_index)
 
