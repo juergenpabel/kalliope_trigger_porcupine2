@@ -1,0 +1,11 @@
+---
+name: "porcupine2"
+type: "trigger"
+author: "juergenpabel"
+
+kalliope_supported_version:
+  - 0.7
+tags:
+  - "porcupine"
+  - "porcupine2"
+  - "trigger"
