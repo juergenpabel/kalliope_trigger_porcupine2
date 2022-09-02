@@ -46,7 +46,6 @@ class Porcupine2(Thread):
 		self.porcupine = None
 		self.pyaudio = None
 		self.audio_stream = None
-		self.audio_stream.print()
 
 
 	def run(self):
