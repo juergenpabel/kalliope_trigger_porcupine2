@@ -5,7 +5,7 @@ import time
 from os.path import basename, expanduser
 from threading import Thread
 from kalliope import Utils
-from pvporcupine import Porcupine, create as new_Porcupine, MODEL_PATH
+from pvporcupine import Porcupine, create as new_Porcupine, LIBRARY_PATH, MODEL_PATH
 import pyaudio
 import struct
 
@@ -33,11 +33,20 @@ class Porcupine2(Thread):
 			with open(expanduser(self.config['access_key_file']), 'r') as file:
 				self.config['access_key'] = file.readline().strip()
 			del self.config['access_key_file']
+
+		if self.config['library_path'] is None:
+			self.config['library_path'] = LIBRARY_PATH
+		if self.config['model_path'] is None:
+			self.config['model_path'] = MODEL_PATH
 		if self.config['keyword_paths'] is not None:
 			self.config['keyword_paths'] = [keyword_path.strip() for keyword_path in self.config['keyword_paths'].split(',')]
 			self.config['keyword_paths'] = [Utils.get_real_file_path(keyword_path) for keyword_path in self.config['keyword_paths']]
 		if type(self.config['sensitivities']) is float:
 			self.config['sensitivities'] = [self.config['sensitivities']]
+		self.porcupine = None
+		self.pyaudio = None
+		self.audio_stream = None
+		self.audio_stream.print()
 
 
 	def run(self):
@@ -46,7 +55,8 @@ class Porcupine2(Thread):
 		                           model_path=self.config['model_path'], keyword_paths=self.config['keyword_paths'],
 		                           sensitivities=self.config['sensitivities'])
 		self.pyaudio = pyaudio.PyAudio()
-		self.audio_stream = None
+		self.audio_stream = self.pyaudio.open(rate=self.porcupine.sample_rate, channels=1, format=pyaudio.paInt16, input=True,
+		                                      frames_per_buffer=self.porcupine.frame_length, input_device_index=self.input_device_index)
 		while True:
 			if self.audio_stream is not None:
 				pcm = self.audio_stream.read(self.porcupine.frame_length)
@@ -62,12 +72,14 @@ class Porcupine2(Thread):
 	def pause(self):
 		if self.audio_stream is not None:
 			logger.debug("[trigger:porcupine2] pause()")
-			self.audio_stream.close()
-			self.audio_stream = None
+			if self.pyaudio is not None:
+				self.audio_stream.close()
+				self.audio_stream = None
 
 	def unpause(self):
 		if self.audio_stream is None:
 			logger.debug("[trigger:porcupine2] unpause()")
-			self.audio_stream = self.pyaudio.open(rate=self.porcupine.sample_rate, channels=1, format=pyaudio.paInt16, input=True,
-			                                      frames_per_buffer=self.porcupine.frame_length, input_device_index=self.input_device_index)
+			if self.pyaudio is not None:
+				self.audio_stream = self.pyaudio.open(rate=self.porcupine.sample_rate, channels=1, format=pyaudio.paInt16, input=True,
+				                                      frames_per_buffer=self.porcupine.frame_length, input_device_index=self.input_device_index)
 
