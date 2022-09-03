@@ -5,6 +5,7 @@ import time
 from os.path import basename, expanduser
 from threading import Thread
 from kalliope import Utils
+from kalliope.core.NeuronModule import MissingParameterException
 from pvporcupine import Porcupine, create as new_Porcupine, LIBRARY_PATH, MODEL_PATH
 import pyaudio
 import struct
@@ -56,6 +57,7 @@ class Porcupine2(Thread):
 		self.pyaudio = pyaudio.PyAudio()
 		self.audio_stream = self.pyaudio.open(rate=self.porcupine.sample_rate, channels=1, format=pyaudio.paInt16, input=True,
 		                                      frames_per_buffer=self.porcupine.frame_length, input_device_index=self.input_device_index)
+		self.audio_stream_open = None
 		while True:
 			if self.audio_stream is not None:
 				pcm = self.audio_stream.read(self.porcupine.frame_length)
@@ -66,14 +68,19 @@ class Porcupine2(Thread):
 					self.pause()
 					self.callback()
 			else:
+				if self.audio_stream_open is not None:
+					self.audio_stream_open.close()
+					self.audio_stream_open = None
 				time.sleep(0.1)
+
 
 	def pause(self):
 		if self.audio_stream is not None:
 			logger.debug("[trigger:porcupine2] pause()")
 			if self.pyaudio is not None:
-				self.audio_stream.close()
+				self.audio_stream_open = self.audio_stream
 				self.audio_stream = None
+
 
 	def unpause(self):
 		if self.audio_stream is None:
