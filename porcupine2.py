@@ -6,7 +6,7 @@ from os.path import basename, expanduser
 from threading import Thread
 from kalliope import Utils
 from kalliope.core.NeuronModule import MissingParameterException
-from pvporcupine import Porcupine, create as new_Porcupine, LIBRARY_PATH, MODEL_PATH
+from pvporcupine import Porcupine, create as new_Porcupine
 import pyaudio
 import struct
 
@@ -35,10 +35,6 @@ class Porcupine2(Thread):
 				self.config['access_key'] = file.readline().strip()
 			del self.config['access_key_file']
 
-		if self.config['library_path'] is None:
-			self.config['library_path'] = LIBRARY_PATH
-		if self.config['model_path'] is None:
-			self.config['model_path'] = MODEL_PATH
 		if self.config['keyword_paths'] is not None:
 			self.config['keyword_paths'] = [keyword_path.strip() for keyword_path in self.config['keyword_paths'].split(',')]
 			self.config['keyword_paths'] = [Utils.get_real_file_path(keyword_path) for keyword_path in self.config['keyword_paths']]
